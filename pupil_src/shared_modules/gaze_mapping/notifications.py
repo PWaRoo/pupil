@@ -15,146 +15,131 @@ import typing as T
 # TODO: Consider extending this pattern for notifications through the entire codebase and/or replace with dataclasses with Python 3.7
 
 
-class _SerializedNamedTupleMixin:
-    def as_dict(self) -> dict:
-        return dict(self._asdict())
+class _NotificationMixin:
+
+    subject = None
 
     @classmethod
-    def from_dict(cls, dict_: dict) -> T.NamedTuple:
-        dict_ = {**cls._field_defaults, **dict_}
-        try:
-            dict_ = cls.sanitize_serialized_dict(dict_)
-            return cls(**dict_)
-        except Exception as err:
-            raise ValueError from err
-
-    @classmethod
-    def sanitize_serialized_dict(cls, dict_: dict) -> dict:
-        field_classes = cls._field_types
-        for field_name in cls._fields:
-            field_cls = field_classes[field_name]
-            dict_[field_name] = field_cls(dict_[field_name])
-        return dict_
-
-    @classmethod
-    def _assert_static_property_matches_dict(
-        cls, dict_: dict, key_name: str, key_type: T.Any, field_name: str = None,
-    ):
-        field_name = field_name if field_name is not None else key_name
-        defaults = cls._field_defaults
-
-        # Assert values present in dict_ and cls
-        assert key_name in dict_, f'Serialized dict must contain "{key_name}" key'
-        assert field_name in defaults, f"{cls.__name__} must define {field_name} value"
-
-        # Extract the dict_ and cls values
-        dict_val = dict_[key_name]
-        real_val = defaults[field_name]
-
-        # Assert dict_ and cls value types
-        assert isinstance(
-            dict_val, key_type
-        ), f'Serialized dict value for "{key_name}" must be of type {key_type.__name__}'
-        assert isinstance(
-            real_val, key_type
-        ), f"{cls.__name__} value for {field_name} must be of type {key_type.__name__}"
-
-        # Assert dict_ and cls values are equal
-        assert (
-            dict_val == real_val
-        ), f"{key_name} missmatch: expected {real_val}, but got {dict_val}"
-
-
-class _NotificationMixin(_SerializedNamedTupleMixin):
-    @classmethod
-    def sanitize_serialized_dict(cls, dict_: dict) -> dict:
-        cls._assert_static_property_matches_dict(dict_, "subject", str)
+    def from_dict(cls, dict_: dict):
+        assert self.subject is not None
+        dict_ = dict_.copy()
+        if "subject" not in dict_:
+            raise ValueError(f'Argument should contain "subject" key')
+        if dict_["subject"] != cls.subject:
+            raise ValueError(f'Argument "subject" expected to be {cls.subject}, but got {dict_["subjcet"]}')
+        del dict_["subject"]
         if "topic" in dict_:
             del dict_["topic"]
-        return super().sanitize_serialized_dict(dict_)
+        return cls(**dict_)
+
+    def as_dict(self) -> dict:
+        assert self.subject is not None
+        return {
+            "subject": self.subject,
+            **self.__dict__,
+        }
 
 
 class _VersionedNotificationMixin(_NotificationMixin):
+
+    version = None
+
     @classmethod
-    def sanitize_serialized_dict(cls, dict_: dict) -> dict:
-        cls._assert_static_property_matches_dict(dict_, "version", int)
-        return super().sanitize_serialized_dict(dict_)
+    def from_dict(cls, dict_: dict):
+        assert self.version is not None
+        dict_ = dict_.copy()
+        if "version" not in dict_:
+            raise ValueError(f'Argument should contain "version" key')
+        if dict_["version"] != cls.version:
+            raise ValueError(f'Argument "version" expected to be {cls.version}, but got {dict_["version"]}')
+        del dict_["version"]
+        return super().from_dict(dict_)
 
-
-### Notification fields
-
-
-class _CalibrationSuccessFields(T.NamedTuple):
-    gazer_class_name: str
-    timestamp: float
-    record: bool = False
-
-    # Meta
-    subject: str = f"calibration.successful"
-
-
-class _CalibrationFailureFields(T.NamedTuple):
-    reason: str
-    gazer_class_name: str
-    timestamp: float
-    record: bool = False
-
-    # Meta
-    subject: str = f"calibration.failed"
-
-
-class _CalibrationSetupFields(T.NamedTuple):
-    gazer_class_name: str
-    timestamp: float
-    calib_data: dict
-    record: bool = False
-
-    # Meta
-    version: int = 2
-    subject: str = f"calibration.setup.v{version}"
-
-
-class _CalibrationResultFields(T.NamedTuple):
-    gazer_class_name: str
-    timestamp: float
-    params: dict
-    record: bool = False
-
-    # Meta
-    version: int = 2
-    subject: str = f"calibration.result.v{version}"
+    def as_dict(self) -> dict:
+        assert self.version is not None
+        return {
+            "version": self.version,
+            **super().as_dict(),
+        }
 
 
 ### Notifications
 
 
-class CalibrationSuccessNotification(_CalibrationSuccessFields, _NotificationMixin):
-    pass
+class CalibrationSuccessNotification(_NotificationMixin):
+
+    # _NotificationMixin
+
+    subject = "calibration.successful"
+
+    def __init__(self, *, gazer_class_name: str, timestamp: float, record: bool = False):
+        self.gazer_class_name = gazer_class_name
+        self.timestamp = timestamp
+        self.record = record
 
 
-class CalibrationFailureNotification(_CalibrationFailureFields, _NotificationMixin):
-    pass
+class CalibrationFailureNotification(_NotificationMixin):
+
+    # _NotificationMixin
+
+    subject = "calibration.failed"
+
+    def __init__(self, *, reason: str, gazer_class_name: str, timestamp: float, record: bool = False):
+        self.reason = reason
+        self.gazer_class_name = gazer_class_name
+        self.timestamp = timestamp
+        self.record = record
 
 
-class CalibrationSetupNotification(
-    _CalibrationSetupFields, _VersionedNotificationMixin
-):
+class CalibrationSetupNotification(_VersionedNotificationMixin):
+
     @classmethod
     def calibration_format_version(cls) -> int:
-        return cls._field_defaults["version"]
+        return cls.version
 
     @staticmethod
     def file_name() -> str:
         return f"prerecorded_calibration_setup"
 
+    # _VersionedNotificationMixin
 
-class CalibrationResultNotification(
-    _CalibrationResultFields, _VersionedNotificationMixin
-):
+    version = 2
+
+    # _NotificationMixin
+
+    subject = f"calibration.setup.v{version}"
+
+    def __init__(self, *, gazer_class_name: str, timestamp: float, calib_data: dict, record: bool = False):
+        self.reason = reason
+        self.gazer_class_name = gazer_class_name
+        self.timestamp = timestamp
+        self.calib_data = calib_data
+        self.record = record
+
+
+class CalibrationResultNotification(_VersionedNotificationMixin):
+
     @classmethod
     def calibration_format_version(cls) -> int:
-        return cls._field_defaults["version"]
+        return cls.version
 
     @staticmethod
     def file_name() -> str:
         return f"prerecorded_calibration_result"
+
+    # _VersionedNotificationMixin
+
+    @classmethod
+    def version(cls):
+        return 2
+
+    # _NotificationMixin
+
+    subject = f"calibration.result.v{version}"
+
+    def __init__(self, *, gazer_class_name: str, timestamp: float, params: dict, record: bool = False):
+        self.reason = reason
+        self.gazer_class_name = gazer_class_name
+        self.timestamp = timestamp
+        self.params = params
+        self.record = record
