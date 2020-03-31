@@ -21,12 +21,12 @@ class _NotificationMixin:
 
     @classmethod
     def from_dict(cls, dict_: dict):
-        assert self.subject is not None
+        assert cls.subject is not None
         dict_ = dict_.copy()
         if "subject" not in dict_:
             raise ValueError(f'Argument should contain "subject" key')
         if dict_["subject"] != cls.subject:
-            raise ValueError(f'Argument "subject" expected to be {cls.subject}, but got {dict_["subjcet"]}')
+            raise ValueError(f'Argument "subject" expected to be {cls.subject}, but got {dict_["subject"]}')
         del dict_["subject"]
         if "topic" in dict_:
             del dict_["topic"]
@@ -46,7 +46,7 @@ class _VersionedNotificationMixin(_NotificationMixin):
 
     @classmethod
     def from_dict(cls, dict_: dict):
-        assert self.version is not None
+        assert cls.version is not None
         dict_ = dict_.copy()
         if "version" not in dict_:
             raise ValueError(f'Argument should contain "version" key')
@@ -110,7 +110,6 @@ class CalibrationSetupNotification(_VersionedNotificationMixin):
     subject = f"calibration.setup.v{version}"
 
     def __init__(self, *, gazer_class_name: str, timestamp: float, calib_data: dict, record: bool = False):
-        self.reason = reason
         self.gazer_class_name = gazer_class_name
         self.timestamp = timestamp
         self.calib_data = calib_data
@@ -129,16 +128,13 @@ class CalibrationResultNotification(_VersionedNotificationMixin):
 
     # _VersionedNotificationMixin
 
-    @classmethod
-    def version(cls):
-        return 2
+    version = 2
 
     # _NotificationMixin
 
     subject = f"calibration.result.v{version}"
 
     def __init__(self, *, gazer_class_name: str, timestamp: float, params: dict, record: bool = False):
-        self.reason = reason
         self.gazer_class_name = gazer_class_name
         self.timestamp = timestamp
         self.params = params
